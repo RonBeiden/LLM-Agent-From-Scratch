@@ -51,6 +51,8 @@ except Exception as _hp_err:
     _client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
     MODEL = "granite4:micro"
 
+import ssl
+import httpx
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 
@@ -66,25 +68,29 @@ TRACES_DIR = Path(__file__).parent / "traces"
 SYSTEM_PROMPT = """\
 You are an autonomous trading agent on a live stock exchange. You are given one \
 goal at a time. Inspect the market and your portfolio with the provided tools \
-as needed, then act on the goal, placing AT MOST ONE order.
+as needed, then act on the goal, placing AT MOST ONE order unless explicitly told otherwise.
 
-Tools return cents-based fields (last_cents, cash_cents). Quantities are whole \
-shares. Every trade pays a 0.05% fee, so a buy of qty shares costs about \
-price_cents * qty * 1.0005 — leave headroom for it.
+MONEY IS IN CENTS. All price and cash fields end in _cents (e.g. last_cents, cash_cents). \
+To display as dollars, divide by 100 and show 2 decimals. \
+For example: cash_cents=10000000 = $100,000.00; last_cents=29801 = $298.01. \
+NEVER show a cents number with a dollar sign without converting first.
 
-MONEY IS IN CENTS. To show dollars, divide the cents value by 100 and format \
-with two decimals — NEVER print a cents number with a dollar sign. \
-For example: cash_cents 10000000 = $100,000.00; last_cents 57722 = $577.22; \
-last_cents 18500 = $185.00. When a goal asks for dollars, always do this \
-conversion before you answer.
+Quantities are whole shares. Every trade pays a 0.05% fee on the trade value. \
+Cost of a buy = price_cents * qty * 1.0005 cents. Leave headroom for the fee.
+
+US market hours only: orders are rejected outside Mon-Fri 09:30-16:00 ET. \
+If rejected for market hours, say so clearly and do not retry.
 
 Safety rules you MUST follow:
-- Never overdraw: a buy can't cost more cash than you have (fee included).
-- Only sell shares you actually hold; the exchange rejects short selling.
-- If place_order returns an {"error": ...}, READ it and adapt. Never claim a \
+- Never overdraw: check get_portfolio() cash_cents before buying.
+- Only sell shares you actually hold (no short selling).
+- If place_order returns {"error": ...}, READ it and adapt. Never claim a \
 trade succeeded when it did not.
+- For read-only goals, do NOT place any order.
 
-When you have satisfied the goal, reply with a short plain-text summary of what \
+Use pct_change(old, new) when the goal asks you to compare or judge a price move.
+
+When the goal is satisfied, reply with a concise plain-text summary of what \
 you did and why, and make no further tool call."""
 
 # ---------------------------------------------------------------------------
@@ -104,7 +110,7 @@ def trace(step: str, payload) -> None:
 # ---------------------------------------------------------------------------
 def pct_change(old_cents: int, new_cents: int) -> dict:
     """
-    Percent change from old_cents to new_cents (e.g. 100 -> 110 is +10.0).
+    Percent change from old_cents to new_cents (e.g. 29000 -> 29801 = +2.76%).
     Read-only math the model can use to judge a price move.
     """
     if not old_cents:
@@ -122,7 +128,8 @@ LOCAL_TOOLS: list[dict] = [
         "function": {
             "name": "pct_change",
             "description": "Percent change between two cents prices (from old_cents to new_cents). "
-                           "Use to judge how far a price has moved; read-only, places no order.",
+                           "Use to judge how far a price has moved; read-only, places no order. "
+                           "e.g. old_cents=29000, new_cents=29801 gives pct=+2.76.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -191,30 +198,16 @@ async def dispatch_tool(name: str, args: dict, client: Client, mcp_names: set):
     elif name in mcp_names:
         try:
             result = await client.call_tool(name, args)
-            # Handle different fastmcp response shapes
-            if isinstance(result, list):
-                texts = []
-                for item in result:
-                    if hasattr(item, 'text'):
-                        texts.append(item.text)
-                    elif isinstance(item, str):
-                        texts.append(item)
-                if len(texts) == 1:
-                    try:
-                        return json.loads(texts[0])
-                    except (json.JSONDecodeError, TypeError):
-                        return texts[0]
-                return texts
-            elif hasattr(result, 'data'):
-                return result.data
-            elif hasattr(result, 'content'):
+            # fastmcp returns CallToolResult with .content list of TextContent
+            if hasattr(result, 'content') and result.content:
                 texts = [item.text for item in result.content if hasattr(item, 'text')]
-                if len(texts) == 1:
-                    try:
-                        return json.loads(texts[0])
-                    except (json.JSONDecodeError, TypeError):
-                        return texts[0]
-                return texts
+                combined = "\n".join(texts)
+                try:
+                    return json.loads(combined)
+                except (json.JSONDecodeError, TypeError):
+                    return combined
+            elif hasattr(result, 'data') and result.data is not None:
+                return result.data
             return str(result)
         except Exception as e:
             return {"error": f"MCP tool {name!r} raised {type(e).__name__}: {e}"}
@@ -277,6 +270,9 @@ async def run_agent(goal: str, client: Client) -> tuple[str, list[dict]]:
             except json.JSONDecodeError:
                 args = {}
             trace("action", {"tool": name, "args": args})
+            # Respect exchange rate limit: wait 13s before any tool call
+            # to avoid 429 errors during multi-step goals
+            await asyncio.sleep(13)
             observation = await dispatch_tool(name, args, client, mcp_names)
             trace("observation", observation)
             tool_log.append({"tool": name, "args": args, "result": observation})
@@ -401,8 +397,13 @@ async def run_goals(api_key: str, goals: list[tuple[int, str]]) -> None:
 # Client factory
 # ---------------------------------------------------------------------------
 def make_live_client(api_key: str) -> Client:
+    # HP corporate network uses SSL interception — pass verify=False to bypass
     return Client(
-        StreamableHttpTransport(url=LIVE_URL, headers={"X-API-Key": api_key})
+        StreamableHttpTransport(
+            url=LIVE_URL,
+            headers={"X-API-Key": api_key},
+            verify=False,
+        )
     )
 
 

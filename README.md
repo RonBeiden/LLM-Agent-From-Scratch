@@ -1,6 +1,6 @@
 # Assignment 3: Build an Agent from Scratch
 
-**Ron Beiden | ID: 206628505 | BGU LLM Models Course**
+**Ron Beiden | BGU LLM Models Course**
 
 Building a ReAct-style agent from scratch -- no frameworks, no magic. Just a loop you write, an LLM that does the thinking, and tools the agent can call.
 

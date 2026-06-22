@@ -21,10 +21,58 @@
   },
   {
     "role": "tool",
-    "content": "{\"positions\": [], \"team_name\": \"Ron-Beiden\", \"cash_cents\": 10000000, \"open_orders\": []}"
+    "content": "{\"positions\": [{\"qty\": 331, \"symbol\": \"AAPL\"}], \"team_name\": \"Ron-Beiden\", \"cash_cents\": 20613, \"open_orders\": []}"
   },
   {
     "role": "assistant",
-    "content": "Your total portfolio value is $100,000.00, all held in cash. You currently have no stock positions, so there are no price movements to report."
+    "content": "",
+    "tool_calls": [
+      {
+        "function": {
+          "name": "get_quote",
+          "arguments": "{\"symbol\": \"AAPL\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "content": "{\"symbol\": \"AAPL\", \"last_cents\": 30160, \"prev_close_cents\": 29801}"
+  },
+  {
+    "role": "assistant",
+    "content": "",
+    "tool_calls": [
+      {
+        "function": {
+          "name": "get_trades",
+          "arguments": "{\"limit\": 50}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "content": "{\"items\": [{\"at\": \"2026-06-22T14:29:13.895835+00:00\", \"qty\": 1, \"role\": \"taker\", \"side\": \"sell\", \"symbol\": \"SPCX\", \"trade_id\": 23, \"price_cents\": 16714}, {\"at\": \"2026-06-22T14:27:36.334175+00:00\", \"qty\": 1, \"role\": \"taker\", \"side\": \"buy\", \"symbol\": \"SPCX\", \"trade_id\": 22, \"price_cents\": 16744}, {\"at\": \"2026-06-22T14:26:15.606873+00:00\", \"qty\": 331, \"role\": \"taker\", \"side\": \"buy\", \"symbol\": \"AAPL\", \"trade_id\": 21, \"price_cents\": 30134}]}"
+  },
+  {
+    "role": "assistant",
+    "content": "",
+    "tool_calls": [
+      {
+        "function": {
+          "name": "pct_change",
+          "arguments": "{\"old_cents\": 30134, \"new_cents\": 30160}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "content": "{\"pct\": 0.09}"
+  },
+  {
+    "role": "assistant",
+    "content": "Your portfolio includes:\n- Cash: $206.13\n- AAPL: 331 shares at market price $301.60, total value $99,829.60\n\nAverage cost for AAPL was $301.34 per share, so AAPL has moved +0.09% from your average cost.\n\nYour total portfolio value is $206.13 (cash) + $99,829.60 (AAPL) = $100,035.73."
   }
 ]

@@ -21,10 +21,10 @@
   },
   {
     "role": "tool",
-    "content": "{\"positions\": [], \"team_name\": \"Ron-Beiden\", \"cash_cents\": 10000000, \"open_orders\": []}"
+    "content": "{\"positions\": [{\"qty\": 331, \"symbol\": \"AAPL\"}, {\"qty\": 1, \"symbol\": \"SPCX\"}], \"team_name\": \"Ron-Beiden\", \"cash_cents\": 3907, \"open_orders\": []}"
   },
   {
     "role": "assistant",
-    "content": "My current portfolio contains $100,000.00 in cash and no stock positions."
+    "content": "My current portfolio:\n- Cash: $39.07\n- Positions:\n  - 331 shares of AAPL\n  - 1 share of SPCX\n\nNo open orders."
   }
 ]

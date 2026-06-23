@@ -422,6 +422,22 @@ async def main():
     parser = argparse.ArgumentParser(description="Live MCP trading agent")
     parser.add_argument("--only", type=int, default=None, metavar="N",
                         help="run only goal N (1-based) instead of all goals")
+    parser.add_argument("--model", type=str, default=None, metavar="MODEL",
+                        help="override model (e.g. qwen2.5:7b). Forces Ollama provider.")
+    args = parser.parse_args()
+
+    # Override model if requested
+    if args.model:
+        global _client, MODEL
+        from openai import OpenAI
+        _client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+        MODEL = args.model
+        print(f"[agent] Model override: {MODEL} (Ollama)")
+        # Update trace dir to separate by model
+        global TRACES_DIR
+        safe = args.model.replace(":", "_").replace("/", "_")
+        TRACES_DIR = Path(__file__).parent / "traces" / safe
+        TRACES_DIR.mkdir(parents=True, exist_ok=True)
     args = parser.parse_args()
 
     api_key = load_api_key()
